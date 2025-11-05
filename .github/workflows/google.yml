@@ -1,39 +1,45 @@
-steps:
-  # 1. Tests
-  - name: golang:1.22
-    entrypoint: bash
-    args:
-      - -c
-      - |
-        go test ./...
+name: Deploy to Cloud Run
 
-  # 2. Build l’image Docker
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      [
-        'build', '-t',
-        'europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:$SHORT_SHA',
-        '.'
-      ]
+on:
+  push:
+    branches:
+      - main
 
-  # 3. Push de l’image
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      [
-        'push',
-        'europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:$SHORT_SHA'
-      ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-  # 4. Déploiement Cloud Run
-  - name: 'gcr.io/cloud-builders/gcloud'
-    args:
-      [
-        'run', 'deploy', 'quelpoke',
-        '--image=europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:$SHORT_SHA',
-        '--region=europe-west9',
-        '--platform=managed',
-        '--allow-unauthenticated'
-      ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-images:
-  - europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:$SHORT_SHA
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Authenticate gcloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure gcloud
+        run: |
+          gcloud config set project $PROJECT_ID
+          gcloud auth configure-docker europe-west9-docker.pkg.dev
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:${{ github.sha }} .
+          docker push europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy quelpoke \
+            --image=europe-west9-docker.pkg.dev/$PROJECT_ID/quelpoke/webapp:${{ github.sha }} \
+            --region=europe-west9 \
+            --platform=managed \
+            --allow-unauthenticated
