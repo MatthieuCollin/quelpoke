@@ -52,5 +52,5 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: |
-          sed "s|\${IMAGE_TAG}|${{ github.sha }}|g" manifest.yaml > manifest-rendered.yaml
+          sed "s|\${IMAGE_TAG}|${{ github.sha }}|g" k8s.yaml > manifest-rendered.yaml
           kubectl apply -f manifest-rendered.yaml --validate=false
