@@ -1,0 +1,63 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: matthieuc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quelpoke
+  namespace: matthieuc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quelpoke
+  template:
+    metadata:
+      labels:
+        app: quelpoke
+    spec:
+      containers:
+      - name: quelpoke
+        image: europe-west9-docker.pkg.dev/cs-poc-hpzdycpiqjyvinhrczvlwcn/student-matthieuc/quelpoke:${IMAGE_TAG}
+        ports:
+        - containerPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quelpoke
+  namespace: matthieuc
+spec:
+  selector:
+    app: quelpoke
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: quelpoke-route
+  namespace: matthieuc
+spec:
+  parentRefs:
+  - kind: Gateway
+    name: external-http-gateway
+    namespace: infra
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /matthieuc
+    backendRefs:
+    - name: quelpoke
+      port: 80
+---
