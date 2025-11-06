@@ -17,16 +17,20 @@ import (
 var indexTemplateFS embed.FS
 
 type indexTemplateParams struct {
-	PokemonID   uint64
-	PokemonName string
-	Name        string
-	Version     string
+	Name          string
+	Version       string
+	PokemonID     uint64
+	PokemonName   string
+	Types         []string
+	Stats         map[string]int
+	Evolutions    []string
+	PokemonSprite string
 }
 
-// env return environment value or default if not exists
+// env : retourne une valeur d’environnement ou défaut
 func env(name string, def string) string {
-	if value := os.Getenv(name); value != "" {
-		return value
+	if v := os.Getenv(name); v != "" {
+		return v
 	}
 	return def
 }
@@ -36,75 +40,167 @@ func main() {
 	port := env("PORT", "8080")
 	listen := fmt.Sprintf("%s:%s", addr, port)
 
-	log.Printf("starting quelpoke app on http://%s", listen)
-
+	log.Printf("🚀 Server running on http://%s", listen)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", index)
+	mux.HandleFunc("/", index)
 	if err := http.ListenAndServe(listen, mux); err != nil {
-		log.Fatal("failed to listen and serve:", err)
+		log.Fatal(err)
 	}
 }
 
-// index renders the index template. It takes name in query parameters
 func index(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	name := r.URL.Query().Get("name")
-	tmpl, err := template.New("").ParseFS(indexTemplateFS, "*")
+	if name == "" {
+		name = "cafard"
+	}
+
+	tmpl, err := template.ParseFS(indexTemplateFS, "index.tmpl.html")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERR] failed to parse embed fs:", err)
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	pid := pokemonID(name, 151)
+	poke, err := fetchPokemon(pid)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
 		return
 	}
 
 	params := indexTemplateParams{
-		PokemonID: pokemonID(name, 151),
-		Name:      name,
-		Version:   env("VERSION", "dev"),
-	}
-	params.PokemonName, err = pokemonName(params.PokemonID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERR] failed to get pokemon name:", err)
-		return
-	}
-
-	if err := tmpl.ExecuteTemplate(w, "index.tmpl.html", params); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("[ERR] failed to execute index template:", err)
-		return
+		Name:          name,
+		Version:       env("VERSION", "cafard-edition"),
+		PokemonID:     pid,
+		PokemonName:   poke.Name,
+		Types:         poke.Types,
+		Stats:         poke.Stats,
+		Evolutions:    poke.Evolutions,
+		PokemonSprite: poke.Sprite,
 	}
 
-	log.Printf("generated page in %s with pokemon id: %d for name: %s", time.Since(start).String(), params.PokemonID, params.Name)
+	if err := tmpl.Execute(w, params); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	log.Printf("✅ Generated page in %s for %s → %s", time.Since(start), name, poke.Name)
 }
 
-// pokemonID computes the sha1 sum of the name and return
-// the modulo by m (m is the maximum pokemon id)
 func pokemonID(name string, m uint64) uint64 {
-	hasher := sha1.New()
-	hasher.Write([]byte(name))
-	return binary.BigEndian.Uint64(hasher.Sum(nil)) % m + 1
+	h := sha1.New()
+	h.Write([]byte(name))
+	return binary.BigEndian.Uint64(h.Sum(nil))%m + 1
 }
 
-func pokemonName(id uint64) (string, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%d", id), nil)
+// Structs pour PokeAPI
+type pokeAPIResponse struct {
+	Name  string `json:"name"`
+	Types []struct {
+		Type struct {
+			Name string `json:"name"`
+		} `json:"type"`
+	} `json:"types"`
+	Stats []struct {
+		BaseStat int `json:"base_stat"`
+		Stat     struct {
+			Name string `json:"name"`
+		} `json:"stat"`
+	} `json:"stats"`
+	Sprites struct {
+		Other struct {
+			Official struct {
+				Front string `json:"front_default"`
+			} `json:"official-artwork"`
+		} `json:"other"`
+	} `json:"sprites"`
+	Species struct {
+		URL string `json:"url"`
+	} `json:"species"`
+}
+
+type pokemonData struct {
+	Name       string
+	Types      []string
+	Stats      map[string]int
+	Sprite     string
+	Evolutions []string
+}
+
+func fetchPokemon(id uint64) (pokemonData, error) {
+	var result pokemonData
+
+	// Récupère le Pokémon
+	resp, err := http.Get(fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%d", id))
 	if err != nil {
-		return "", err
+		return result, err
+	}
+	defer resp.Body.Close()
+
+	var poke pokeAPIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&poke); err != nil {
+		return result, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	result.Name = poke.Name
+	result.Sprite = poke.Sprites.Other.Official.Front
+	result.Stats = make(map[string]int)
+	for _, s := range poke.Stats {
+		result.Stats[s.Stat.Name] = s.BaseStat
+	}
+	for _, t := range poke.Types {
+		result.Types = append(result.Types, t.Type.Name)
+	}
+
+	// Récupère les évolutions
+	result.Evolutions = fetchEvolutions(poke.Species.URL)
+	return result, nil
+}
+
+func fetchEvolutions(speciesURL string) []string {
+	resp, err := http.Get(speciesURL)
 	if err != nil {
-		return "", err
+		return nil
 	}
+	defer resp.Body.Close()
 
-	type pokemon struct {
-		Name string `json:"name"`
+	var species struct {
+		EvolutionChain struct {
+			URL string `json:"url"`
+		} `json:"evolution_chain"`
 	}
+	json.NewDecoder(resp.Body).Decode(&species)
 
-	poke := new(pokemon)
-	err = json.NewDecoder(resp.Body).Decode(poke)
+	resp2, err := http.Get(species.EvolutionChain.URL)
 	if err != nil {
-		return "", err
+		return nil
 	}
+	defer resp2.Body.Close()
 
-	return poke.Name, nil
+	var chain struct {
+		Chain struct {
+			Species struct {
+				Name string `json:"name"`
+			} `json:"species"`
+			EvolvesTo []struct {
+				Species struct {
+					Name string `json:"name"`
+				} `json:"species"`
+				EvolvesTo []struct {
+					Species struct {
+						Name string `json:"name"`
+					} `json:"species"`
+				} `json:"evolves_to"`
+			} `json:"evolves_to"`
+		} `json:"chain"`
+	}
+	json.NewDecoder(resp2.Body).Decode(&chain)
+
+	evols := []string{chain.Chain.Species.Name}
+	for _, e := range chain.Chain.EvolvesTo {
+		evols = append(evols, e.Species.Name)
+		for _, f := range e.EvolvesTo {
+			evols = append(evols, f.Species.Name)
+		}
+	}
+	return evols
 }

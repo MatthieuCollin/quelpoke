@@ -1,30 +1,94 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quel POKéMON es-tu ? ({{ .Version }})</title>
+  <meta charset="UTF-8">
+  <title>Quel Pokémon es-tu ? ({{.Version}})</title>
+  <style>
+    body {
+      font-family: "Poppins", sans-serif;
+      background: linear-gradient(135deg, #fceabb, #f8b500);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 2em;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      width: 400px;
+      text-align: center;
+    }
+    h1 { color: #333; }
+    img {
+      width: 200px;
+      border-radius: 10px;
+      margin-bottom: 1em;
+    }
+    .types span {
+      display: inline-block;
+      background: #eee;
+      padding: 0.3em 0.8em;
+      border-radius: 10px;
+      margin: 0.2em;
+      font-size: 0.9em;
+    }
+    .stats {
+      margin-top: 1em;
+      text-align: left;
+    }
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      margin: 0.3em 0;
+    }
+    .evolutions {
+      margin-top: 1em;
+      font-size: 0.9em;
+      color: #555;
+    }
+    input, button {
+      margin-top: 1em;
+      padding: 0.8em;
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+    }
+    button {
+      background: #f8b500;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+  </style>
 </head>
-
 <body>
-    <div style="margin-left: auto; margin-right: auto; width: 30%;">
-        <h1 style="display: block; margin-left: auto; margin-right: auto; width: fit-content; color: darkslategrey;">
-            Quel Pokémon es-tu 8=====D ? ({{ .Version }})</h1>
-        <img width="100%"
-            src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/{{.PokemonID}}.png">
-        <h2 style="display: block; margin-left: auto; margin-right: auto; width: fit-content; color: rgb(30, 64, 64);">
-            {{ .PokemonName }}</h1>
-            <div>
-                <form action="" method="GET">
-                    <label style="margin-bottom: 2em;" for="name">Votre prénom</label>
-                    <input style="margin-bottom: 2em; width: 100%;" type="text" name="name" id="name" value="{{.Name}}">
-                    <button type="submit"
-                        style="display: block; margin-left: auto; margin-right: auto; width: 33%; padding: 1em; color: rgb(30, 37, 37); background-color: bisque;">
-                        Découvrez votre pokémon</button>
-                </form>
-            </div>
-    </div>
-</body>
+  <div class="card">
+    <h1>Quel Pokémon es-tu ?</h1>
+    <img src="{{.PokemonSprite}}" alt="{{.PokemonName}}">
+    <h2>{{.PokemonName | title}}</h2>
 
+    <div class="types">
+      {{range .Types}}<span>{{.}}</span>{{end}}
+    </div>
+
+    <div class="stats">
+      <h3>Stats :</h3>
+      {{range $k, $v := .Stats}}
+        <div class="stat"><span>{{$k}}</span><span>{{$v}}</span></div>
+      {{end}}
+    </div>
+
+    <div class="evolutions">
+      <h3>Évolutions :</h3>
+      {{range .Evolutions}}<span>{{.}}</span> → {{end}}
+    </div>
+
+    <form action="" method="GET">
+      <input type="text" name="name" placeholder="Ton prénom" value="{{.Name}}">
+      <button type="submit">Découvre ton Pokémon</button>
+    </form>
+  </div>
+</body>
 </html>
