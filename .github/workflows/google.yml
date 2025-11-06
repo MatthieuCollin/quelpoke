@@ -9,7 +9,7 @@ env:
   REGION: europe-west9
   CLUSTER_NAME: gke-maalsi24-infal127
   GKE_ZONE: europe-west9
-  IMAGE_NAME: europe-west9-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/student-matthieuc/quelpoke
+  IMAGE_NAME: europe-west9-docker.pkg.dev/cs-poc-hpzdycpiqjyvinhrczvlwcn/student-matthieuc/quelpoke
 
 jobs:
   build-deploy:
