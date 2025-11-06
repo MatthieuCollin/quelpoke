@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -55,7 +56,14 @@ func index(w http.ResponseWriter, r *http.Request) {
 		name = "cafard"
 	}
 
-	tmpl, err := template.ParseFS(indexTemplateFS, "index.tmpl.html")
+	tmpl, err := template.New("index.tmpl.html").Funcs(template.FuncMap{
+		"title": func(s string) string {
+			if s == "" {
+				return ""
+			}
+			return strings.ToUpper(s[:1]) + s[1:]
+		},
+	}).ParseFS(indexTemplateFS, "index.tmpl.html")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
